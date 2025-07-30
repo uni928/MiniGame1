@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>数字パズル</title>
+  <title>数字パズルゲーム</title>
   <style>
     table { border-collapse: collapse; margin: 20px auto; }
     td {
@@ -17,22 +17,22 @@
 </head>
 <body>
   <h2 style="text-align:center">数字パズルゲーム</h2>
-<div style="text-align:center; margin-bottom: 10px;" id="buttons">
+
+  <div style="text-align:center; margin-bottom: 10px;" id="buttons">
     <button onclick="resetGame()">🔁 リセット</button>
     <button onclick="nextPuzzle()">➡️ 次の問題へ</button>
-    <button onclick="harder()">👑 高難易度化</button> 
+    <button onclick="harder()">👑 高難易度化</button>
+    <button onclick="showAnswer()">🧠 答え</button>
   </div>
+
   <table id="grid"></table>
   <div id="info"></div>
-
+  <div id="answerPath" style="text-align:center; margin-top:10px; font-size: 20px;"></div>
   <script>
     const size = 5;
-    let grid = [];
-    let visited = [];
-    let current = { x: 0, y: 0 };
-    let score = 0;
-    let goal = { x: 0, y: 0 };
-    let targetScore = 0;
+    let grid = [], visited = [], current = { x: 0, y: 0 }, goal = { x: 0, y: 0 };
+    let score = 0, targetScore = 0;
+    let bestPathGlobal = [];
 
     function generateCell() {
       const ops = ['+', '-', '*', '/'];
@@ -56,30 +56,19 @@
     function generateGrid() {
       grid = Array(size).fill(null).map(() => Array(size).fill(''));
       visited = Array(size).fill(null).map(() => Array(size).fill(false));
-
-      // パネル配置
       const allCoords = [];
       for (let y = 0; y < size; y++)
         for (let x = 0; x < size; x++)
           allCoords.push({ x, y });
-
-      // StartとGoalを設定
       const shuffled = allCoords.sort(() => Math.random() - 0.5);
       current = shuffled[0];
       goal = shuffled[1];
       grid[current.y][current.x] = 'START';
       grid[goal.y][goal.x] = 'GOAL';
-
-      // 他のパネル
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          if (grid[y][x] === '') {
-            grid[y][x] = generateCell();
-          }
-        }
-      }
-
-      score = 10; // 初期スコア
+      for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++)
+          if (grid[y][x] === '') grid[y][x] = generateCell();
+      score = 10;
     }
 
     function renderGrid() {
@@ -90,6 +79,7 @@
         for (let x = 0; x < size; x++) {
           const cell = document.createElement('td');
           cell.textContent = grid[y][x];
+          cell.dataset.xy = `${x},${y}`;
           if (visited[y][x]) cell.classList.add('visited');
           if (x === current.x && y === current.y) cell.classList.add('highlight');
           cell.addEventListener('click', () => tryMove(x, y));
@@ -97,30 +87,22 @@
         }
         table.appendChild(row);
       }
-
       document.getElementById('info').innerHTML =
         `現在のスコア: <span class="highlight">${score}</span> / 目標: <span class="highlight">${targetScore}</span>`;
     }
 
     function tryMove(x, y) {
       if (visited[y][x]) return;
-
-      const dx = Math.abs(x - current.x);
-      const dy = Math.abs(y - current.y);
+      const dx = Math.abs(x - current.x), dy = Math.abs(y - current.y);
       if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) return;
-
       visited[current.y][current.x] = true;
       current = { x, y };
-
       const cell = grid[y][x];
       if (cell === 'GOAL') {
         checkGoal();
-      } else if (cell === 'START') {
-        // do nothing
-      } else {
+      } else if (cell !== 'START') {
         score = applyOperation(score, cell);
       }
-
       renderGrid();
     }
 
@@ -128,20 +110,22 @@
       renderGrid();
       setTimeout(() => {
         if (score >= targetScore) {
-          alert(`クリア成功！スコア: ${score}`);
+          alert(`🎉 クリア成功！スコア: ${score}`);
         } else {
-          alert(`スコア不足: ${score} < ${targetScore}`);
+          alert(`😢 スコア不足: ${score} < ${targetScore}`);
         }
       }, 200);
     }
 
     function simulateTargetScore(times = 10000) {
       let maxScore = 0;
+      let bestPath = [];
       for (let i = 0; i < times; i++) {
         let tempScore = 10;
         let tempVisited = Array(size).fill(null).map(() => Array(size).fill(false));
         let pos = { ...current };
         let steps = 0;
+        let path = [pos];
         while (steps < size * size) {
           const dirs = [
             { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
@@ -150,7 +134,10 @@
           ];
           const moves = dirs
             .map(d => ({ x: pos.x + d.dx, y: pos.y + d.dy }))
-            .filter(p => p.x >= 0 && p.x < size && p.y >= 0 && p.y < size && !tempVisited[p.y][p.x]);
+            .filter(p =>
+              p.x >= 0 && p.x < size &&
+              p.y >= 0 && p.y < size &&
+              !tempVisited[p.y][p.x]);
           if (moves.length === 0) break;
           const next = moves[Math.floor(Math.random() * moves.length)];
           tempVisited[pos.y][pos.x] = true;
@@ -158,21 +145,20 @@
           if (cell !== 'GOAL' && cell !== 'START') {
             tempScore = applyOperation(tempScore, cell);
           }
+          path.push(next);
           pos = next;
           steps++;
           if (pos.x === goal.x && pos.y === goal.y) break;
         }
-        if (pos.x === goal.x && pos.y === goal.y) {
-          maxScore = Math.max(maxScore, tempScore);
+        if (pos.x === goal.x && pos.y === goal.y && tempScore > maxScore) {
+          maxScore = tempScore;
+          bestPath = path.map(p => ({ x: p.x, y: p.y }));
         }
       }
+      bestPathGlobal = bestPath;
       return maxScore;
     }
 
-    // 初期化
-    generateGrid();
-    targetScore = simulateTargetScore();
-    renderGrid();
     function resetGame() {
       visited = Array(size).fill(null).map(() => Array(size).fill(false));
       current = findCoord('START');
@@ -185,29 +171,87 @@
       targetScore = simulateTargetScore();
       renderGrid();
     }
+
+    function harder() {
+      const confirmHard = confirm("本当に高難易度化しますか？（処理に数秒かかります）");
+      if (!confirmHard) return;
+      document.getElementById('info').innerHTML = "高難易度化中...しばらくお待ちください";
+      setTimeout(() => {
+        const newScore = simulateTargetScore(1000000);
+        if (newScore > targetScore) {
+          targetScore = newScore;
+          alert(`💪 高難易度化成功！新しい目標スコアは ${targetScore} です`);
+        } else {
+          alert(`🙅‍♂️ 高難易度化失敗。現在の目標スコア ${targetScore} より高くはなりませんでした。`);
+        }
+        renderGrid();
+      }, 50);
+    }
+
+    function showAnswer() {
+  if (!bestPathGlobal || bestPathGlobal.length === 0) {
+    alert("答えが記録されていません。");
+    return;
+  }
+
+  // 色リセット
+  document.querySelectorAll("td").forEach(td => {
+    td.style.backgroundColor = "";
+  });
+
+  // 経路をハイライト
+  for (const p of bestPathGlobal) {
+    const td = document.querySelector(`td[data-xy='${p.x},${p.y}']`);
+    if (td) td.style.backgroundColor = "#cde";
+  }
+
+  // スコア再計算
+  let answerScore = 10;
+  for (let i = 1; i < bestPathGlobal.length; i++) {
+    const { x, y } = bestPathGlobal[i];
+    const cell = grid[y][x];
+    if (cell !== 'GOAL' && cell !== 'START') {
+      answerScore = applyOperation(answerScore, cell);
+    }
+  }
+
+  alert(`🧠 記録された最適スコアは ${answerScore} です！`);
+
+  // ➡➡↘⬇ などの矢印列を生成
+  const arrows = [];
+  for (let i = 1; i < bestPathGlobal.length; i++) {
+    const dx = bestPathGlobal[i].x - bestPathGlobal[i - 1].x;
+    const dy = bestPathGlobal[i].y - bestPathGlobal[i - 1].y;
+    arrows.push(getArrow(dx, dy));
+  }
+
+  document.getElementById("answerPath").innerHTML = arrows.join("");
+}
+
+function getArrow(dx, dy) {
+  if (dx === -1 && dy === 0) return "⬅️";
+  if (dx === 1 && dy === 0) return "➡️";
+  if (dx === 0 && dy === -1) return "⬆️";
+  if (dx === 0 && dy === 1) return "⬇️";
+  if (dx === -1 && dy === -1) return "↖";
+  if (dx === 1 && dy === -1) return "↗";
+  if (dx === -1 && dy === 1) return "↙";
+  if (dx === 1 && dy === 1) return "↘";
+  return "❓";
+}
+
+
     function findCoord(label) {
       for (let y = 0; y < size; y++)
         for (let x = 0; x < size; x++)
           if (grid[y][x] === label) return { x, y };
       return { x: 0, y: 0 };
     }
-function harder() {
-  const confirmHard = confirm("本当に高難易度化しますか？（処理に数秒かかります）");
-  if (!confirmHard) return;
 
-  document.getElementById('info').innerHTML = "高難易度化中...しばらくお待ちください";
-
-  setTimeout(() => {
-    const newScore = simulateTargetScore(1000000); // 100万回実行
-    if (newScore > targetScore) {
-      targetScore = newScore;
-      alert(`高難易度化成功！新しい目標スコアは ${targetScore} です。`);
-    } else {
-      alert(`高難易度化失敗。現在の目標スコア ${targetScore} より高くはなりませんでした。`);
-    }
+    // 初期化
+    generateGrid();
+    targetScore = simulateTargetScore();
     renderGrid();
-  }, 50); // 表示更新待ち
-}
   </script>
 </body>
 </html>
