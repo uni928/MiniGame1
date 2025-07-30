@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>数字パズル</title>
+  <style>
+    table { border-collapse: collapse; margin: 20px auto; }
+    td {
+      width: 80px; height: 80px; border: 1px solid #ccc;
+      text-align: center; vertical-align: middle;
+      font-size: 18px; cursor: pointer;
+    }
+    td.visited { background-color: #eee; }
+    #info { text-align: center; margin-top: 20px; font-size: 18px; }
+    .highlight { font-weight: bold; color: darkblue; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center">数字パズルゲーム</h2>
+<div style="text-align:center; margin-bottom: 10px;" id="buttons">
+    <button onclick="resetGame()">🔁 リセット</button>
+    <button onclick="nextPuzzle()">➡️ 次の問題へ</button>
+  </div>
+  <table id="grid"></table>
+  <div id="info"></div>
+
+  <script>
+    const size = 5;
+    let grid = [];
+    let visited = [];
+    let current = { x: 0, y: 0 };
+    let score = 0;
+    let goal = { x: 0, y: 0 };
+    let targetScore = 0;
+
+    function generateCell() {
+      const ops = ['+', '-', '*', '/'];
+      const val = Math.floor(Math.random() * 9) + 1;
+      const op = ops[Math.floor(Math.random() * ops.length)];
+      return `${op}${val}`;
+    }
+
+    function applyOperation(value, operation) {
+      const op = operation[0];
+      const num = parseInt(operation.slice(1));
+      switch (op) {
+        case '+': return value + num;
+        case '-': return value - num;
+        case '*': return value * num;
+        case '/': return Math.floor(value / num);
+        default: return value;
+      }
+    }
+
+    function generateGrid() {
+      grid = Array(size).fill(null).map(() => Array(size).fill(''));
+      visited = Array(size).fill(null).map(() => Array(size).fill(false));
+
+      // パネル配置
+      const allCoords = [];
+      for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++)
+          allCoords.push({ x, y });
+
+      // StartとGoalを設定
+      const shuffled = allCoords.sort(() => Math.random() - 0.5);
+      current = shuffled[0];
+      goal = shuffled[1];
+      grid[current.y][current.x] = 'START';
+      grid[goal.y][goal.x] = 'GOAL';
+
+      // 他のパネル
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (grid[y][x] === '') {
+            grid[y][x] = generateCell();
+          }
+        }
+      }
+
+      score = 10; // 初期スコア
+    }
+
+    function renderGrid() {
+      const table = document.getElementById('grid');
+      table.innerHTML = '';
+      for (let y = 0; y < size; y++) {
+        const row = document.createElement('tr');
+        for (let x = 0; x < size; x++) {
+          const cell = document.createElement('td');
+          cell.textContent = grid[y][x];
+          if (visited[y][x]) cell.classList.add('visited');
+          if (x === current.x && y === current.y) cell.classList.add('highlight');
+          cell.addEventListener('click', () => tryMove(x, y));
+          row.appendChild(cell);
+        }
+        table.appendChild(row);
+      }
+
+      document.getElementById('info').innerHTML =
+        `現在のスコア: <span class="highlight">${score}</span> / 目標: <span class="highlight">${targetScore}</span>`;
+    }
+
+    function tryMove(x, y) {
+      if (visited[y][x]) return;
+
+      const dx = Math.abs(x - current.x);
+      const dy = Math.abs(y - current.y);
+      if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) return;
+
+      visited[current.y][current.x] = true;
+      current = { x, y };
+
+      const cell = grid[y][x];
+      if (cell === 'GOAL') {
+        checkGoal();
+      } else if (cell === 'START') {
+        // do nothing
+      } else {
+        score = applyOperation(score, cell);
+      }
+
+      renderGrid();
+    }
+
+    function checkGoal() {
+      renderGrid();
+      setTimeout(() => {
+        if (score >= targetScore) {
+          alert(`クリア成功！スコア: ${score}`);
+        } else {
+          alert(`スコア不足: ${score} < ${targetScore}`);
+        }
+      }, 200);
+    }
+
+    function simulateTargetScore(times = 10000) {
+      let maxScore = 0;
+      for (let i = 0; i < times; i++) {
+        let tempScore = 10;
+        let tempVisited = Array(size).fill(null).map(() => Array(size).fill(false));
+        let pos = { ...current };
+        let steps = 0;
+        while (steps < size * size) {
+          const dirs = [
+            { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+            { dx: -1, dy: 0 },                    { dx: 1, dy: 0 },
+            { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+          ];
+          const moves = dirs
+            .map(d => ({ x: pos.x + d.dx, y: pos.y + d.dy }))
+            .filter(p => p.x >= 0 && p.x < size && p.y >= 0 && p.y < size && !tempVisited[p.y][p.x]);
+          if (moves.length === 0) break;
+          const next = moves[Math.floor(Math.random() * moves.length)];
+          tempVisited[pos.y][pos.x] = true;
+          const cell = grid[next.y][next.x];
+          if (cell !== 'GOAL' && cell !== 'START') {
+            tempScore = applyOperation(tempScore, cell);
+          }
+          pos = next;
+          steps++;
+          if (pos.x === goal.x && pos.y === goal.y) break;
+        }
+        if (pos.x === goal.x && pos.y === goal.y) {
+          maxScore = Math.max(maxScore, tempScore);
+        }
+      }
+      return maxScore;
+    }
+
+    // 初期化
+    generateGrid();
+    targetScore = simulateTargetScore();
+    renderGrid();
+    function resetGame() {
+      visited = Array(size).fill(null).map(() => Array(size).fill(false));
+      current = findCoord('START');
+      score = 10;
+      renderGrid();
+    }
+
+    function nextPuzzle() {
+      generateGrid();
+      targetScore = simulateTargetScore();
+      renderGrid();
+    }
+    function findCoord(label) {
+      for (let y = 0; y < size; y++)
+        for (let x = 0; x < size; x++)
+          if (grid[y][x] === label) return { x, y };
+      return { x: 0, y: 0 };
+    }
+  </script>
+</body>
+</html>
