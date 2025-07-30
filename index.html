@@ -217,7 +217,7 @@
 
   alert(`🧠 記録された最適スコアは ${answerScore} です！`);
 
-  // ➡➡↘⬇ などの矢印列を生成
+  // ➡️➡️↘⬇️ などの矢印列を生成
   const arrows = [];
   for (let i = 1; i < bestPathGlobal.length; i++) {
     const dx = bestPathGlobal[i].x - bestPathGlobal[i - 1].x;
@@ -225,7 +225,14 @@
     arrows.push(getArrow(dx, dy));
   }
 
-  document.getElementById("answerPath").innerHTML = arrows.join("");
+  // 5個ごとに全角スペース区切りで表示整形
+  const spaced = arrows.reduce((acc, cur, idx) => {
+    acc += cur;
+    if ((idx + 1) % 5 === 0 && idx !== arrows.length - 1) acc += "　"; // 全角スペース
+    return acc;
+  }, "");
+
+  document.getElementById("answerPath").innerHTML = spaced;
 }
 
 function getArrow(dx, dy) {
