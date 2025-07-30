@@ -20,6 +20,7 @@
 <div style="text-align:center; margin-bottom: 10px;" id="buttons">
     <button onclick="resetGame()">🔁 リセット</button>
     <button onclick="nextPuzzle()">➡️ 次の問題へ</button>
+    <button onclick="harder()">👑 高難易度化</button> 
   </div>
   <table id="grid"></table>
   <div id="info"></div>
@@ -190,6 +191,23 @@
           if (grid[y][x] === label) return { x, y };
       return { x: 0, y: 0 };
     }
+function harder() {
+  const confirmHard = confirm("本当に高難易度化しますか？（処理に数秒かかります）");
+  if (!confirmHard) return;
+
+  document.getElementById('info').innerHTML = "高難易度化中...しばらくお待ちください";
+
+  setTimeout(() => {
+    const newScore = simulateTargetScore(1000000); // 100万回実行
+    if (newScore > targetScore) {
+      targetScore = newScore;
+      alert(`高難易度化成功！新しい目標スコアは ${targetScore} です。`);
+    } else {
+      alert(`高難易度化失敗。現在の目標スコア ${targetScore} より高くはなりませんでした。`);
+    }
+    renderGrid();
+  }, 50); // 表示更新待ち
+}
   </script>
 </body>
 </html>
