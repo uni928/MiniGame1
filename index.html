@@ -23,6 +23,9 @@
     <button onclick="nextPuzzle()">➡️ 次の問題へ</button>
     <button onclick="harder()">👑 高難易度化</button>
     <button onclick="showAnswer()">🧠 答え</button>
+    <button onclick="exportToTxt()">📤 問題を書き出す</button>
+    <input type="file" id="importFile" accept=".txt" style="display:none" onchange="importFromTxt(this)">
+    <button onclick="document.getElementById('importFile').click()">📥 問題を読み込む</button>
   </div>
 
   <table id="grid"></table>
@@ -256,6 +259,96 @@ function getArrow(dx, dy) {
           if (grid[y][x] === label) return { x, y };
       return { x: 0, y: 0 };
     }
+
+function exportToTxt() {
+  let lines = [];
+  lines.push("START:" + current.x + "," + current.y);
+  lines.push("GOAL:" + goal.x + "," + goal.y);
+  lines.push("GRID:");
+  for (let y = 0; y < size; y++) {
+    let row = [];
+    for (let x = 0; x < size; x++) {
+      row.push(grid[y][x]);
+    }
+    lines.push(row.join(","));
+  }
+
+  lines.push("BESTPATH:");
+  if (bestPathGlobal && bestPathGlobal.length > 0) {
+    for (const p of bestPathGlobal) {
+      lines.push(`${p.x},${p.y}`);
+    }
+  }
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "puzzle.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importFromTxt(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const lines = e.target.result.trim().split("\n");
+
+    const start = lines[0].replace("START:", "").split(",").map(Number);
+    const goalCoord = lines[1].replace("GOAL:", "").split(",").map(Number);
+    const gridStartIndex = lines.findIndex(l => l.startsWith("GRID:")) + 1;
+    const bestPathStartIndex = lines.findIndex(l => l.startsWith("BESTPATH:")) + 1;
+
+    grid = [];
+    for (let y = 0; y < size; y++) {
+      grid[y] = lines[gridStartIndex + y].split(",");
+    }
+
+    current = { x: start[0], y: start[1] };
+    goal = { x: goalCoord[0], y: goalCoord[1] };
+    visited = Array(size).fill(null).map(() => Array(size).fill(false));
+    score = 10;
+
+    bestPathGlobal = [];
+    if (bestPathStartIndex > 0) {
+      for (let i = bestPathStartIndex; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line === "" || !line.includes(",")) continue;
+        const [x, y] = line.split(",").map(Number);
+        if (!isNaN(x) && !isNaN(y)) {
+          bestPathGlobal.push({ x, y });
+        }
+      }
+    }
+
+if (bestPathGlobal.length > 1) {
+  targetScore = calculateScoreFromPath(bestPathGlobal);
+} else {
+  targetScore = simulateTargetScore();
+}
+
+
+    document.getElementById("answerPath").innerHTML = "";
+    //targetScore = simulateTargetScore();
+    renderGrid();
+  };
+  reader.readAsText(file);
+}
+
+function calculateScoreFromPath(path) {
+  let tempScore = 10;
+  for (let i = 1; i < path.length; i++) {
+    const { x, y } = path[i];
+    const cell = grid[y][x];
+    if (cell !== 'GOAL' && cell !== 'START') {
+      tempScore = applyOperation(tempScore, cell);
+    }
+  }
+  return tempScore;
+}
 
     // 初期化
     generateGrid();
