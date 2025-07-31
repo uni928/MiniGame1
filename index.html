@@ -179,7 +179,7 @@
       if (!confirmHard) return;
       document.getElementById('info').innerHTML = "高難易度化中...しばらくお待ちください";
       setTimeout(() => {
-        const newScore = simulateTargetScore(1000000);
+        const newScore = simulateTargetScore(500000);
         if (newScore > targetScore) {
           targetScore = newScore;
           alert(`💪 高難易度化成功！新しい目標スコアは ${targetScore} です`);
