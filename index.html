@@ -167,6 +167,8 @@
     }
 
     function nextPuzzle() {
+      bestPathGlobal = []; // ← すでにあるならOK
+      document.getElementById("answerPath").innerHTML = ""; // ←★追加！
       generateGrid();
       targetScore = simulateTargetScore();
       renderGrid();
