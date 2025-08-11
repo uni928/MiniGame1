@@ -50,6 +50,21 @@
     <button class="btn" id="importBtn">📥 盤面を読み込む</button>
   </div>
 
+<label class="btn" style="display:inline-flex;align-items:center;gap:8px;">
+  ⏳ 制限時間
+  <select id="timeLimitSelect">
+    <option value="0">設定なし</option>
+    <option value="240">ベリーイージー 240秒</option>
+    <option value="120">イージー 120秒</option>
+    <option value="80">ノーマル 80秒</option>
+    <option value="50">ハード 50秒</option>
+    <option value="20">ベリーハード 20秒</option>
+    <option value="12">運 12秒</option>
+  </select>
+</label>
+<span id="timeLeft" style="min-width:110px;text-align:center;">残り：—</span>
+
+
   <table id="grid"></table>
   <div id="answerPath"></div>
   <div id="note">※ クリックで上下左右斜めに1マスだけ移動できます（<b>一度通ったマスは再訪不可</b>）。</div>
@@ -285,6 +300,12 @@ function playerMove(x, y) {
       render();
     }
 
+    if(wasImproved) {
+       if (timeLimitSec > 0 && remainingSec > 0) {
+         clearCountdown();
+       }
+    }
+
     alert(
       wasImproved
         ? `🎉 クリア！\nスコア: ${score}（ベスト: ${oldBestScore}）`
@@ -393,6 +414,7 @@ function playerMove(x, y) {
       playerMode = true;
       render();
       if (showAnswerMode) drawBest();
+      startCountdownIfNeeded();
     });
 
     document.getElementById('resetBestBtn').addEventListener('click', () => {
@@ -507,10 +529,54 @@ function harder() {
     render();
     if (showAnswerMode) drawBest();
     alert(msg);
+    startCountdownIfNeeded();
   }, 50);
 }
 
 document.getElementById('harderBtn').addEventListener('click', harder);
+
+// === タイマー関連 ===
+let timeLimitSec = 0;      // セレクトの設定秒数（0=なし）
+let remainingSec = 0;      // 残り秒
+let countdownId = null;    // setInterval ハンドル
+
+function updateTimeLeftLabel() {
+  const el = document.getElementById('timeLeft');
+  if (!el) return;
+  el.textContent = timeLimitSec > 0 ? `残り：${remainingSec}s` : '残り：—';
+}
+
+function clearCountdown() {
+  if (countdownId) {
+    clearInterval(countdownId);
+    countdownId = null;
+  }
+}
+
+function startCountdownIfNeeded() {
+  clearCountdown();
+  if (timeLimitSec <= 0) { remainingSec = 0; updateTimeLeftLabel(); return; }
+  remainingSec = timeLimitSec;
+  updateTimeLeftLabel();
+  countdownId = setInterval(() => {
+    remainingSec = Math.max(remainingSec - 1, 0);
+    updateTimeLeftLabel();
+    if (remainingSec <= 0) {
+      clearCountdown();
+      alert('⏰ 制限時間になりました！このまま続けてプレイできます。');
+      // タイマーは止めるだけ（プレイは継続可）
+    }
+  }, 1000);
+}
+
+// 制限時間セレクト変更
+document.getElementById('timeLimitSelect').addEventListener('change', (e) => {
+  timeLimitSec = parseInt(e.target.value, 10) || 0;
+  // プレイ中に変更されたら、ここでリスタートせず新設定で即再カウント開始
+  startCountdownIfNeeded();
+});
+
+
 
 
     // 同じ盤面で START から再プレイ（ベストは保持）
@@ -522,7 +588,7 @@ document.getElementById('harderBtn').addEventListener('click', harder);
       playerMode = true;
       render();
       if (showAnswerMode) drawBest();
+      startCountdownIfNeeded();
   </script>
 </body>
 </html>
-
