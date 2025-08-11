@@ -276,6 +276,7 @@ function playerMove(x, y) {
   // 行き止まり時のみベスト更新＆クリア扱い
   if (nextMoves.length === 0) {
     const wasImproved = (score >= bestScore);
+    const oldBestScore = bestScore;
     if (wasImproved) {
       bestScore = score;
       bestPath = path.map(p => ({ x: p.x, y: p.y }));
@@ -285,8 +286,8 @@ function playerMove(x, y) {
 
     alert(
       wasImproved
-        ? `🎉 クリア！\nスコア: ${score}（ベスト: ${bestScore}）`
-        : `🧩 失敗…\nスコア: ${score}（ベスト: ${bestScore}）`
+        ? `🎉 クリア！\nスコア: ${score}（ベスト: ${oldBestScore}）`
+        : `🧩 失敗…\nスコア: ${score}（ベスト: ${oldBestScore}）`
     );
   }
 }
@@ -432,4 +433,5 @@ function playerMove(x, y) {
   </script>
 </body>
 </html>
+
 
