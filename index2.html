@@ -275,7 +275,7 @@ function playerMove(x, y) {
 
   // 行き止まり時のみベスト更新＆クリア扱い
   if (nextMoves.length === 0) {
-    const wasImproved = (score > bestScore);
+    const wasImproved = (score >= bestScore);
     if (wasImproved) {
       bestScore = score;
       bestPath = path.map(p => ({ x: p.x, y: p.y }));
@@ -432,3 +432,4 @@ function playerMove(x, y) {
   </script>
 </body>
 </html>
+
