@@ -42,6 +42,7 @@
   <div id="controls">
     <button class="btn" id="restartBtn">🔁 プレイを最初から（同じ盤面）</button>
     <button class="btn" id="newBoardBtn">🧩 新しい盤面を作る</button>
+    <button class="btn" id="harderBtn">👑 高難易度化</button>
     <button class="btn" id="resetBestBtn">🏁 ベストをリセット</button>
     <button class="btn" id="toggleAnswerBtn">🧠 答え（表示/非表示）</button>
     <button class="btn" id="exportBtn">📤 盤面を書き出す</button>
@@ -421,6 +422,97 @@ function playerMove(x, y) {
     playerMode = true;
     render();
 
+function setBusy(busy, msg = "高難易度化中…") {
+  const ids = ["restartBtn","newBoardBtn","resetBestBtn","toggleAnswerBtn","exportBtn","importBtn","harderBtn"];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !!busy;
+  });
+  const info = document.getElementById("infobar");
+  if (!info) return;
+  if (busy) {
+    const cur = document.getElementById("cur")?.textContent ?? "—";
+    const best = document.getElementById("best")?.textContent ?? "—";
+    info.innerHTML = `現在のスコア：<span id="cur" class="highlight">${cur}</span> /
+      ベスト：<span id="best" class="highlight">${best}</span>　<span style="margin-left:8px;color:#444">${msg}</span>`;
+  } else {
+    info.innerHTML = `現在のスコア：<span id="cur" class="highlight">${score}</span> /
+      ベスト：<span id="best" class="highlight">${bestScore===-Infinity?'—':bestScore}</span>`;
+  }
+}
+
+function runHardSearch(iterations = 4000000) {
+  // ローカル状態（グローバルを汚さない）
+  let v = Array.from({length:size}, _ => Array(size).fill(false));
+  let p = { ...start };
+  let sc = 10;
+  let pathLocal = [{...p}];
+
+  v[p.y][p.x] = true;
+
+  let localBestScore = -Infinity;
+  let localBestPath = [];
+
+  for (let i = 0; i < iterations; i++) {
+    // 周囲の未訪問
+    const moves = dirs
+      .map(d => ({ x: p.x + d.dx, y: p.y + d.dy }))
+      .filter(q => q.x>=0 && q.x<size && q.y>=0 && q.y<size && !v[q.y][q.x]);
+
+    if (moves.length === 0) {
+      // 行き止まり → ここでのみベスト更新
+      if (sc > localBestScore) {
+        localBestScore = sc;
+        localBestPath = pathLocal.map(t => ({x:t.x, y:t.y}));
+      }
+      // 同じ盤面で START に戻して続行
+      v = Array.from({length:size}, _ => Array(size).fill(false));
+      p = { ...start };
+      sc = 10;
+      pathLocal = [{...p}];
+      v[p.y][p.x] = true;
+      continue;
+    }
+
+    // 1手進む
+    const nx = moves[Math.floor(Math.random()*moves.length)];
+    v[nx.y][nx.x] = true;
+
+    const cell = grid[nx.y][nx.x];
+    if (cell !== 'START') sc = applyOperation(sc, cell);
+
+    p = nx;
+    pathLocal.push({...p});
+
+    // ※ ベスト更新はしない（行き止まり時のみ）
+  }
+
+  return { score: localBestScore, path: localBestPath };
+}
+
+function harder() {
+  setBusy(true);
+  // 少し待ってUIを更新してから重い処理を開始
+  setTimeout(() => {
+    const result = runHardSearch(4000000); // 400万回
+    let msg;
+    if (result.score > bestScore) {
+      bestScore = result.score;
+      bestPath = result.path;
+      msg = `💪 高難易度化成功！新しいベストは ${bestScore} です。`;
+    } else {
+      msg = `🙅 高難易度化の結果、ベストは更新されませんでした（現状: ${bestScore===-Infinity?'—':bestScore}）。`;
+    }
+    setBusy(false);
+    render();
+    if (showAnswerMode) drawBest();
+    alert(msg);
+  }, 50);
+}
+
+document.getElementById('harderBtn').addEventListener('click', harder);
+
+
     // 同じ盤面で START から再プレイ（ベストは保持）
       visited = Array.from({length:size}, _ => Array(size).fill(false));
       pos = { ...start };
@@ -433,5 +525,4 @@ function playerMove(x, y) {
   </script>
 </body>
 </html>
-
 
