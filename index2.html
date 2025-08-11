@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>数字パズル（動けなくなった時点でベストを更新すればクリア！）</title>
+  <style>
+    body {
+      background: #f2f2f2;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "ヒラギノ角ゴ ProN", "Meiryo", sans-serif;
+    }
+    h2 { text-align: center; margin: 14px 0 6px; }
+    #infobar { text-align: center; margin: 6px 0 12px; font-size: 16px; }
+    .highlight { font-weight: 700; color: #0b3; }
+    #controls { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin: 8px 0 12px;}
+    .btn { padding:8px 12px; border:1px solid #ddd; border-radius:8px; background:#fff; cursor:pointer; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    table { border-collapse: collapse; margin: 8px auto; }
+    td {
+      width: 80px; height: 80px; border: 1px solid #ccc;
+      text-align: center; vertical-align: middle; font-size: 18px;
+      background: #fff; position: relative; user-select: none;
+    }
+    td.visited { background-color: #f3f3f3; }
+    td.current { outline: 3px solid #3b82f6; }
+    .step-number {
+      position: absolute; top: 2px; right: 4px;
+      font-size: 12px; color: darkred; font-weight: bold;
+    }
+    #answerPath { text-align:center; margin-top:8px; font-size: 20px; min-height: 28px; }
+    #note { text-align:center; font-size: 13px; color:#666; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h2>数字パズル（動けなくなった時点でベストを更新すればクリア！）</h2>
+
+  <div id="infobar">
+    現在のスコア：<span id="cur" class="highlight">—</span> /
+    ベスト：<span id="best" class="highlight">—</span>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="restartBtn">🔁 プレイを最初から（同じ盤面）</button>
+    <button class="btn" id="newBoardBtn">🧩 新しい盤面を作る</button>
+    <button class="btn" id="resetBestBtn">🏁 ベストをリセット</button>
+    <button class="btn" id="toggleAnswerBtn">🧠 答え（表示/非表示）</button>
+    <button class="btn" id="exportBtn">📤 盤面を書き出す</button>
+    <input type="file" id="importFile" accept=".txt" style="display:none">
+    <button class="btn" id="importBtn">📥 盤面を読み込む</button>
+  </div>
+
+  <table id="grid"></table>
+  <div id="answerPath"></div>
+  <div id="note">※ クリックで上下左右斜めに1マスだけ移動できます（<b>一度通ったマスは再訪不可</b>）。</div>
+
+  <script>
+    // ======= 設定・状態 =======
+    const size = 5;
+    const dirs = [
+      { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+      { dx: -1, dy: 0 },                    { dx: 1, dy: 0 },
+      { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+    ];
+
+    let grid = [], visited = [], start = {x:0,y:0}, pos = {x:0,y:0};
+    let score = 10;
+    let bestScore = -Infinity;
+    let path = [];       // 現在のルート（START含む）
+    let bestPath = [];   // ベスト更新時のルート
+    let playerMode = false; // プリウォーク後に true
+    let showAnswerMode = false; // 最初は答えを出さない
+
+    // ======= 盤面生成・演算 =======
+    function generateCell() {
+      const ops = ['+', '-', '*', '/'];
+      const val = Math.floor(Math.random() * 9) + 1;
+      const op = ops[Math.floor(Math.random() * ops.length)];
+      return `${op}${val}`;
+    }
+
+    function applyOperation(value, operation) {
+      const op = operation[0];
+      const num = parseInt(operation.slice(1), 10);
+      switch (op) {
+        case '+': return value + num;
+        case '-': return value - num;
+        case '*': return value * num;
+        case '/': return Math.floor(value / num);
+        default:  return value;
+      }
+    }
+
+    function calculateScoreFromPath(pathIn) {
+      let temp = 10;
+      for (let i=1;i<pathIn.length;i++) {
+        const {x,y} = pathIn[i];
+        const cell = grid[y][x];
+        if (cell !== 'START') temp = applyOperation(temp, cell);
+      }
+      return temp;
+    }
+
+    function generateBoard() {
+      grid = Array.from({length:size}, _ => Array(size).fill(''));
+      visited = Array.from({length:size}, _ => Array(size).fill(false));
+      // START をランダム配置
+      start = { x: Math.floor(Math.random()*size), y: Math.floor(Math.random()*size) };
+      pos = { ...start };
+      grid[start.y][start.x] = 'START';
+      // 他は演算子
+      for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
+        if (grid[y][x] === '') grid[y][x] = generateCell();
+      }
+      score = 10;
+      path = [{...pos}];
+      visited[pos.y][pos.x] = true;
+      bestScore = -Infinity;
+      bestPath = [];
+      playerMode = false;
+      showAnswerMode = false; // 最初は答え非表示
+      render();
+      drawBest(); // showAnswerMode=false なので実質非表示
+    }
+
+    // ======= 描画 =======
+    function render() {
+      const table = document.getElementById('grid');
+      table.innerHTML = '';
+      for (let y=0; y<size; y++) {
+        const tr = document.createElement('tr');
+        for (let x=0; x<size; x++) {
+          const td = document.createElement('td');
+          td.dataset.xy = `${x},${y}`;
+          td.textContent = grid[y][x];
+          if (visited[y][x]) td.classList.add('visited');
+          if (x===pos.x && y===pos.y) td.classList.add('current');
+          td.addEventListener('click', () => playerMove(x, y));
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      document.getElementById('cur').textContent = score;
+      document.getElementById('best').textContent = (bestScore===-Infinity ? '—' : bestScore);
+
+      // 答え表示のオン/オフ反映
+      if (showAnswerMode) drawBest(); else clearBestOverlay();
+    }
+
+    function clearBestOverlay() {
+      document.querySelectorAll('td').forEach(td => {
+        td.style.backgroundColor = '';
+        const label = td.querySelector('.step-number');
+        if (label) label.remove();
+      });
+      document.getElementById('answerPath').textContent = '';
+    }
+
+    function getArrow(dx, dy) {
+      if (dx === -1 && dy === 0) return "⬅️";
+      if (dx ===  1 && dy === 0) return "➡️";
+      if (dx ===  0 && dy ===-1) return "⬆️";
+      if (dx ===  0 && dy === 1) return "⬇️";
+      if (dx === -1 && dy ===-1) return "↖";
+      if (dx ===  1 && dy ===-1) return "↗";
+      if (dx === -1 && dy === 1) return "↙";
+      if (dx ===  1 && dy === 1) return "↘";
+      return "❓";
+    }
+
+    function drawBest() {
+      clearBestOverlay();
+      if (!showAnswerMode) return;               // 非表示モードなら描かない
+      if (!bestPath || bestPath.length === 0) return;
+
+      // 経路ハイライト＆通過順番号（0=START）
+      for (let i=0;i<bestPath.length;i++) {
+        const p = bestPath[i];
+        const td = document.querySelector(`td[data-xy='${p.x},${p.y}']`);
+        if (!td) continue;
+        td.style.backgroundColor = "#cde";
+        const label = document.createElement('div');
+        label.className = "step-number";
+        label.textContent = i;
+        td.appendChild(label);
+      }
+
+      // 矢印列（5個ごとに全角スペース）
+      const arrows = [];
+      for (let i=1;i<bestPath.length;i++) {
+        const dx = bestPath[i].x - bestPath[i-1].x;
+        const dy = bestPath[i].y - bestPath[i-1].y;
+        arrows.push(getArrow(dx,dy));
+      }
+      const spaced = arrows.reduce((acc,cur,idx)=>{
+        acc += cur;
+        if ((idx+1)%5===0 && idx!==arrows.length-1) acc += "　";
+        return acc;
+      },"");
+      document.getElementById('answerPath').textContent = spaced;
+    }
+
+    // ======= ランダムウォーク（プリウォーク用・描画なし） =======
+ function stepOnceCore() {
+   const moves = dirs
+     .map(d => ({ x: pos.x + d.dx, y: pos.y + d.dy }))
+     .filter(p => p.x>=0 && p.x<size && p.y>=0 && p.y<size && !visited[p.y][p.x]);
+
+   if (moves.length === 0) {
+    // 行き止まり（プリウォークの「クリア」相当）→ ベスト更新判定してからリセット
+    if (score > bestScore) {
+      bestScore = score;
+      bestPath = path.map(p=>({x:p.x,y:p.y}));
+    }
+     visited = Array.from({length:size}, _ => Array(size).fill(false));
+     pos = { ...start };
+     score = 10;
+     path = [{...pos}];
+     visited[pos.y][pos.x] = true;
+     return;
+   }
+
+   const next = moves[Math.floor(Math.random()*moves.length)];
+   visited[next.y][next.x] = true;
+
+   const cell = grid[next.y][next.x];
+   if (cell !== 'START') score = applyOperation(score, cell);
+
+   pos = next;
+   path.push({...pos});
+
+  // 次の手がなければ「行き止まり」→ そのタイミングでのみベスト判定
+  const nextMoves = dirs
+    .map(d => ({ x: pos.x + d.dx, y: pos.y + d.dy }))
+    .filter(p => p.x>=0 && p.x<size && p.y>=0 && p.y<size && !visited[p.y][p.x]);
+  if (nextMoves.length === 0) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestPath = path.map(p=>({x:p.x,y:p.y}));
+    }
+    // 行き止まり後は即リセット（プリウォーク継続）
+    visited = Array.from({length:size}, _ => Array(size).fill(false));
+    pos = { ...start };
+    score = 10;
+    path = [{...pos}];
+    visited[pos.y][pos.x] = true;
+  }
+ }
+
+
+    function prewalk(steps = 30000) {
+      for (let i=0; i<steps; i++) stepOnceCore();
+    }
+
+    // ======= プレイヤー操作（クリック移動） =======
+function playerMove(x, y) {
+  if (!playerMode) return;               // プレウォーク中は無視
+  if (visited[y][x]) return;              // 再訪不可
+  const dx = Math.abs(x - pos.x), dy = Math.abs(y - pos.y);
+  if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) return; // 8方向移動のみ
+
+  // 移動処理
+  visited[y][x] = true;
+  const cell = grid[y][x];
+  if (cell !== 'START') score = applyOperation(score, cell);
+
+  pos = { x, y };
+  path.push({ ...pos });
+  render();
+  if (showAnswerMode) drawBest();
+
+  // 次の手があるか確認
+  const nextMoves = dirs
+    .map(d => ({ x: pos.x + d.dx, y: pos.y + d.dy }))
+    .filter(p => p.x >= 0 && p.x < size && p.y >= 0 && p.y < size && !visited[p.y][p.x]);
+
+  // 行き止まり時のみベスト更新＆クリア扱い
+  if (nextMoves.length === 0) {
+    const wasImproved = (score > bestScore);
+    if (wasImproved) {
+      bestScore = score;
+      bestPath = path.map(p => ({ x: p.x, y: p.y }));
+      if (showAnswerMode) drawBest();
+      render();
+    }
+
+    alert(
+      wasImproved
+        ? `🎉 クリア！\nスコア: ${score}（ベスト: ${bestScore}）`
+        : `🧩 失敗…\nスコア: ${score}（ベスト: ${bestScore}）`
+    );
+  }
+}
+
+
+
+
+    // ======= 盤面のファイル入出力 =======
+    function exportToTxt() {
+      const lines = [];
+      lines.push(`START:${start.x},${start.y}`);
+      lines.push('GRID:');
+      for (let y=0; y<size; y++) {
+        lines.push(grid[y].join(','));
+      }
+      lines.push('BESTPATH:');
+      for (const p of bestPath) {
+        lines.push(`${p.x},${p.y}`);
+      }
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'puzzle_nogoal.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importFromTxt(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const lines = e.target.result.trim().split('\n');
+        const startLine = lines[0].replace('START:', '').split(',').map(Number);
+        const gridStartIndex = lines.findIndex(l => l.startsWith('GRID:')) + 1;
+        const bestPathStartIndex = lines.findIndex(l => l.startsWith('BESTPATH:')) + 1;
+
+        // GRID 復元
+        grid = [];
+        for (let y=0; y<size; y++) {
+          grid[y] = lines[gridStartIndex + y].split(',');
+        }
+
+        // START・初期化
+        start = { x: startLine[0], y: startLine[1] };
+        pos = { ...start };
+        visited = Array.from({length:size}, _ => Array(size).fill(false));
+        visited[pos.y][pos.x] = true;
+        score = 10;
+
+        // BESTPATH 復元
+        bestPath = [];
+        if (bestPathStartIndex > 0) {
+          for (let i = bestPathStartIndex; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line || !line.includes(',')) continue;
+            const [x, y] = line.split(',').map(Number);
+            if (!isNaN(x) && !isNaN(y)) bestPath.push({x,y});
+          }
+        }
+
+        // ベストスコアは保存しない方針 → 逆算
+        bestScore = bestPath.length ? calculateScoreFromPath(bestPath) : -Infinity;
+
+        // 状態
+        path = [{...pos}];
+        playerMode = true;          // すぐプレイ可能に
+        showAnswerMode = false;     // 読み込み直後は答え非表示
+        render();
+        drawBest();
+      };
+      reader.readAsText(file);
+    }
+
+    // ======= ボタン =======
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      // 同じ盤面で START から再プレイ（ベストは保持）
+      visited = Array.from({length:size}, _ => Array(size).fill(false));
+      pos = { ...start };
+      score = 10;
+      path = [{...pos}];
+      visited[pos.y][pos.x] = true;
+      playerMode = true;
+      render();
+      if (showAnswerMode) drawBest();
+    });
+
+    document.getElementById('newBoardBtn').addEventListener('click', () => {
+      generateBoard();
+      // 新しい盤面を生成 → 再び5000歩プリウォーク → プレイヤー開始
+      prewalk(500000);
+      playerMode = true;
+      render();
+      if (showAnswerMode) drawBest();
+
+      // 同じ盤面で START から再プレイ（ベストは保持）
+      visited = Array.from({length:size}, _ => Array(size).fill(false));
+      pos = { ...start };
+      score = 10;
+      path = [{...pos}];
+      visited[pos.y][pos.x] = true;
+      playerMode = true;
+      render();
+      if (showAnswerMode) drawBest();
+    });
+
+    document.getElementById('resetBestBtn').addEventListener('click', () => {
+      bestScore = -Infinity;
+      bestPath = [];
+      if (showAnswerMode) drawBest(); else clearBestOverlay();
+      render();
+    });
+
+    document.getElementById('toggleAnswerBtn').addEventListener('click', () => {
+      showAnswerMode = !showAnswerMode;
+      if (showAnswerMode) drawBest(); else clearBestOverlay();
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', exportToTxt);
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) importFromTxt(e.target.files[0]);
+      e.target.value = '';
+    });
+
+    // ======= 初期化：盤面→5000歩プリウォーク→プレイヤー開始 =======
+    generateBoard();
+    prewalk(500000);
+    playerMode = true;
+    render();
+
+    // 同じ盤面で START から再プレイ（ベストは保持）
+      visited = Array.from({length:size}, _ => Array(size).fill(false));
+      pos = { ...start };
+      score = 10;
+      path = [{...pos}];
+      visited[pos.y][pos.x] = true;
+      playerMode = true;
+      render();
+      if (showAnswerMode) drawBest();
+  </script>
+</body>
+</html>
